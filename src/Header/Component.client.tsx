@@ -13,9 +13,11 @@ import { LocaleSwitch } from '@/components/LocaleSwitch'
 interface HeaderClientProps {
   data: Header
   locale: string
+  /** Absolute URL of the configured site logo, or null to keep the default. */
+  siteLogo?: string | null
 }
 
-export const HeaderClient: React.FC<HeaderClientProps> = ({ data, locale }) => {
+export const HeaderClient: React.FC<HeaderClientProps> = ({ data, locale, siteLogo }) => {
   /* Storing the value in a useState to avoid hydration errors */
   const [theme, setTheme] = useState<string | null>(null)
   const { headerTheme, setHeaderTheme } = useHeaderTheme()
@@ -35,7 +37,12 @@ export const HeaderClient: React.FC<HeaderClientProps> = ({ data, locale }) => {
     <header className="container relative z-20   " {...(theme ? { 'data-theme': theme } : {})}>
       <div className="py-8 flex justify-between">
         <Link href={`/${locale}`}>
-          <Logo loading="eager" priority="high" className="invert dark:invert-0" />
+          <Logo
+            loading="eager"
+            priority="high"
+            src={siteLogo || undefined}
+            className={siteLogo ? '' : 'invert dark:invert-0'}
+          />
         </Link>
         <div className="flex items-center gap-4">
           <HeaderNav data={data} />

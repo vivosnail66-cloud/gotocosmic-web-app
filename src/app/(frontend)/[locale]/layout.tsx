@@ -6,6 +6,9 @@ import { GeistSans } from 'geist/font/sans'
 import React from 'react'
 
 import { AdminBar } from '@/components/AdminBar'
+import { Analytics } from '@/components/Analytics'
+import { AnnouncementBar } from '@/components/AnnouncementBar'
+import { FloatingButtons } from '@/components/FloatingButtons'
 import { Footer } from '@/Footer/Component'
 import { Header } from '@/Header/Component'
 import { Providers } from '@/providers'
@@ -41,15 +44,19 @@ export default async function RootLayout({
       </head>
       <body>
         <Providers>
+          <Analytics locale={locale} />
+
           <AdminBar
             adminBarProps={{
               preview: isEnabled,
             }}
           />
 
+          <AnnouncementBar locale={locale} />
           <Header locale={locale} />
           {children}
           <Footer locale={locale} />
+          <FloatingButtons locale={locale} />
         </Providers>
       </body>
     </html>

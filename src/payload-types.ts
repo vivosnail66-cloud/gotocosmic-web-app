@@ -108,16 +108,18 @@ export interface Config {
   db: {
     defaultIDType: string;
   };
-  fallbackLocale: null;
+  fallbackLocale: ('false' | 'none' | 'null') | false | null | ('en' | 'zh') | ('en' | 'zh')[];
   globals: {
     header: Header;
     footer: Footer;
+    'site-settings': SiteSetting;
   };
   globalsSelect: {
     header: HeaderSelect<false> | HeaderSelect<true>;
     footer: FooterSelect<false> | FooterSelect<true>;
+    'site-settings': SiteSettingsSelect<false> | SiteSettingsSelect<true>;
   };
-  locale: null;
+  locale: 'en' | 'zh';
   widgets: {
     collections: CollectionsWidget;
   };
@@ -724,9 +726,6 @@ export interface Form {
       )[]
     | null;
   submitButtonLabel?: string | null;
-  /**
-   * Choose whether to display an on-page message or redirect to a different page after they submit the form.
-   */
   confirmationType?: ('message' | 'redirect') | null;
   confirmationMessage?: {
     root: {
@@ -746,9 +745,6 @@ export interface Form {
   redirect?: {
     url: string;
   };
-  /**
-   * Send custom emails when the form submits. Use comma separated lists to send the same email to multiple recipients. To reference a value from this form, wrap that field's name with double curly brackets, i.e. {{firstName}}. You can use a wildcard {{*}} to output all data and {{*:table}} to format it as an HTML table in the email.
-   */
   emails?:
     | {
         emailTo?: string | null;
@@ -757,9 +753,6 @@ export interface Form {
         replyTo?: string | null;
         emailFrom?: string | null;
         subject: string;
-        /**
-         * Enter the message that should be sent in this email.
-         */
         message?: {
           root: {
             type: string;
@@ -1691,6 +1684,101 @@ export interface Footer {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site-settings".
+ */
+export interface SiteSetting {
+  id: string;
+  general?: {
+    /**
+     * Desktop/site logo. Used in the header and footer. Leave empty to keep the default logo.
+     */
+    logo?: (string | null) | Media;
+    company?: {
+      name?: string | null;
+      address?: string | null;
+      email?: string | null;
+      /**
+       * Phone number shown in the footer.
+       */
+      phone?: string | null;
+    };
+    copyright?: {
+      /**
+       * e.g. "© 2026 Gotocosmic. All rights reserved."
+       */
+      text?: string | null;
+    };
+  };
+  announcement: {
+    enabled?: boolean | null;
+    text?: string | null;
+    link: {
+      type?: ('reference' | 'custom') | null;
+      newTab?: boolean | null;
+      reference?:
+        | ({
+            relationTo: 'pages';
+            value: string | Page;
+          } | null)
+        | ({
+            relationTo: 'posts';
+            value: string | Post;
+          } | null);
+      url?: string | null;
+      label: string;
+    };
+    /**
+     * Seconds before the bar auto-hides. 0 = never auto-hides. Users can always dismiss it with ×.
+     */
+    autoHideSeconds?: number | null;
+  };
+  floatingButtons?: {
+    enabled?: boolean | null;
+    /**
+     * When unchecked, all floating buttons are hidden on screens ≤ 768px.
+     */
+    showOnMobile?: boolean | null;
+    buttons?:
+      | {
+          type: 'whatsapp' | 'email' | 'phone' | 'custom';
+          /**
+           * Tooltip/aria label, e.g. "Chat with us".
+           */
+          label?: string | null;
+          /**
+           * WhatsApp: number with country code (no "+"). Email: address. Phone: number. Custom: full URL.
+           */
+          value: string;
+          enabled?: boolean | null;
+          id?: string | null;
+        }[]
+      | null;
+  };
+  analytics?: {
+    /**
+     * Enabled trackers with a non-empty ID/code are injected into the site <head>. Others are skipped.
+     */
+    items?:
+      | {
+          platform: 'ga4' | 'facebookPixel' | 'custom';
+          /**
+           * GA4: G-XXXXXXXXXX. Facebook Pixel: a 15–16 digit ID.
+           */
+          trackerId?: string | null;
+          /**
+           * Paste a full <script> snippet (e.g. TikTok Pixel, Clarity) or plain JS. Injected verbatim.
+           */
+          code?: string | null;
+          enabled?: boolean | null;
+          id?: string | null;
+        }[]
+      | null;
+  };
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "header_select".
  */
 export interface HeaderSelect<T extends boolean = true> {
@@ -1730,6 +1818,77 @@ export interface FooterSelect<T extends boolean = true> {
               label?: T;
             };
         id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site-settings_select".
+ */
+export interface SiteSettingsSelect<T extends boolean = true> {
+  general?:
+    | T
+    | {
+        logo?: T;
+        company?:
+          | T
+          | {
+              name?: T;
+              address?: T;
+              email?: T;
+              phone?: T;
+            };
+        copyright?:
+          | T
+          | {
+              text?: T;
+            };
+      };
+  announcement?:
+    | T
+    | {
+        enabled?: T;
+        text?: T;
+        link?:
+          | T
+          | {
+              type?: T;
+              newTab?: T;
+              reference?: T;
+              url?: T;
+              label?: T;
+            };
+        autoHideSeconds?: T;
+      };
+  floatingButtons?:
+    | T
+    | {
+        enabled?: T;
+        showOnMobile?: T;
+        buttons?:
+          | T
+          | {
+              type?: T;
+              label?: T;
+              value?: T;
+              enabled?: T;
+              id?: T;
+            };
+      };
+  analytics?:
+    | T
+    | {
+        items?:
+          | T
+          | {
+              platform?: T;
+              trackerId?: T;
+              code?: T;
+              enabled?: T;
+              id?: T;
+            };
       };
   updatedAt?: T;
   createdAt?: T;
