@@ -1,0 +1,40 @@
+# Dependencies
+node_modules
+
+# Build output
+build
+dist
+.next
+coverage
+*.tsbuildinfo
+
+# Environment — commit .env.example only as a template
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+
+# Editors / IDE
+.idea/
+*.swp
+
+# Payload default media upload directory
+public/media/
+
+# Generated at build time
+public/robots.txt
+public/sitemap*.xml
+next-env.d.ts
+.vercel
+
+# Logs
+*.log
+npm-debug.log*
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
