@@ -163,7 +163,7 @@ export interface Page {
   id: string;
   title: string;
   hero: {
-    type: 'none' | 'highImpact' | 'mediumImpact' | 'lowImpact';
+    type: 'none' | 'highImpact' | 'mediumImpact' | 'lowImpact' | 'splitImage' | 'splitCards';
     richText?: {
       root: {
         type: string;
@@ -204,6 +204,38 @@ export interface Page {
         }[]
       | null;
     media?: (string | null) | Media;
+    /**
+     * Swap layout: image/cards on left, text on right
+     */
+    reversed?: boolean | null;
+    cards?:
+      | {
+          icon: string;
+          title: string;
+          subtitle?: string | null;
+          content?: {
+            root: {
+              type: string;
+              children: {
+                type: any;
+                version: number;
+                [k: string]: unknown;
+              }[];
+              direction: ('ltr' | 'rtl') | null;
+              format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+              indent: number;
+              version: number;
+            };
+            [k: string]: unknown;
+          } | null;
+          accentColor?: ('violet' | 'blue' | 'amber' | 'emerald' | 'red' | 'gray') | null;
+          buttonLabel?: string | null;
+          buttonLink?: string | null;
+          id?: string | null;
+          blockName?: string | null;
+          blockType: 'bookingCard';
+        }[]
+      | null;
   };
   layout: (CallToActionBlock | ContentBlock | MediaBlock | ArchiveBlock | FormBlock)[];
   meta?: {
@@ -1131,6 +1163,24 @@ export interface PagesSelect<T extends boolean = true> {
               id?: T;
             };
         media?: T;
+        reversed?: T;
+        cards?:
+          | T
+          | {
+              bookingCard?:
+                | T
+                | {
+                    icon?: T;
+                    title?: T;
+                    subtitle?: T;
+                    content?: T;
+                    accentColor?: T;
+                    buttonLabel?: T;
+                    buttonLink?: T;
+                    id?: T;
+                    blockName?: T;
+                  };
+            };
       };
   layout?:
     | T
