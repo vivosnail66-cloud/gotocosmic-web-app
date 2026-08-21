@@ -10,15 +10,18 @@ import { post1 } from './post-1'
 import { post2 } from './post-2'
 import { post3 } from './post-3'
 
-const collections: CollectionSlug[] = [
+// `menu-items` is cast because `payload-types.ts` doesn't know the collection
+// until `pnpm generate:types` re-runs (see docs/development-log.md).
+const collections = [
   'categories',
   'media',
   'pages',
   'posts',
+  'menu-items',
   'forms',
   'form-submissions',
   'search',
-]
+] as CollectionSlug[]
 
 const globals: GlobalSlug[] = ['header', 'footer']
 
@@ -202,7 +205,7 @@ export const seed = async ({
 
   payload.logger.info(`— Seeding pages...`)
 
-  const [_, contactPage] = await Promise.all([
+  const [homePage, contactPage] = await Promise.all([
     payload.create({
       collection: 'pages',
       depth: 0,
@@ -215,32 +218,148 @@ export const seed = async ({
     }),
   ])
 
+  payload.logger.info(`— Seeding menu items...`)
+
+  type SeedMenuItemData = {
+    label: string
+    type?: 'link' | 'columnTitle' | 'featured' | 'cta'
+    link?: {
+      type?: 'custom' | 'reference'
+      url?: string
+      reference?: { relationTo: string; value: string | number }
+    }
+    parent?: string | number
+    order?: number
+    column?: number
+    badge?: string
+    description?: string
+    image?: string | number
+  }
+
+  const createMenuItem = (data: SeedMenuItemData) =>
+    payload.create({
+      collection: 'menu-items' as never,
+      depth: 0,
+      context: { disableRevalidate: true },
+      data: data as never,
+    }) as unknown as Promise<{ id: string | number }>
+
+  // Top-level items — curated + ordered by the header global. "Solutions" has
+  // children, so it becomes a mega-panel trigger (and also carries a link so
+  // editors can see both behaviours).
+  const [postsMenuItem, solutionsMenuItem, contactMenuItem] = await Promise.all([
+    createMenuItem({
+      label: 'Posts',
+      type: 'link',
+      order: 0,
+      link: { type: 'custom', url: '/posts' },
+    }),
+    createMenuItem({
+      label: 'Solutions',
+      type: 'link',
+      order: 1,
+      link: { type: 'reference', reference: { relationTo: 'pages', value: homePage.id } },
+    }),
+    createMenuItem({
+      label: 'Contact',
+      type: 'link',
+      order: 2,
+      link: { type: 'reference', reference: { relationTo: 'pages', value: contactPage.id } },
+    }),
+  ])
+
+  // Children of "Solutions" exercise every mega-panel element: two columns with
+  // column titles, link rows (badge + description), a featured image card, and a
+  // bottom CTA bar.
+  await Promise.all([
+    createMenuItem({
+      label: 'Fulfillment',
+      type: 'columnTitle',
+      parent: solutionsMenuItem.id,
+      column: 1,
+      order: 0,
+    }),
+    createMenuItem({
+      label: 'Global Shipping',
+      type: 'link',
+      parent: solutionsMenuItem.id,
+      column: 1,
+      order: 1,
+      badge: 'New',
+      description: 'Deliver to 100+ countries in 5–8 days.',
+      link: { type: 'custom', url: '/posts' },
+    }),
+    createMenuItem({
+      label: 'Warehousing',
+      type: 'link',
+      parent: solutionsMenuItem.id,
+      column: 1,
+      order: 2,
+      description: 'Compliance-first storage and packing.',
+      link: { type: 'custom', url: '/posts' },
+    }),
+    createMenuItem({
+      label: 'Integrations',
+      type: 'columnTitle',
+      parent: solutionsMenuItem.id,
+      column: 2,
+      order: 3,
+    }),
+    createMenuItem({
+      label: 'Shopify',
+      type: 'link',
+      parent: solutionsMenuItem.id,
+      column: 2,
+      order: 4,
+      link: { type: 'custom', url: '/posts' },
+    }),
+    createMenuItem({
+      label: 'TikTok Shop',
+      type: 'link',
+      parent: solutionsMenuItem.id,
+      column: 2,
+      order: 5,
+      badge: 'Hot',
+      link: { type: 'custom', url: '/posts' },
+    }),
+    createMenuItem({
+      label: 'See it in action',
+      type: 'featured',
+      parent: solutionsMenuItem.id,
+      order: 6,
+      description: 'A cross-border order from checkout to delivery.',
+      image: image2Doc.id,
+      link: { type: 'reference', reference: { relationTo: 'posts', value: post1Doc.id } },
+    }),
+    createMenuItem({
+      label: 'Talk to our team',
+      type: 'cta',
+      parent: solutionsMenuItem.id,
+      order: 7,
+      description: 'Get a fulfillment plan tailored to your store.',
+      link: { type: 'reference', reference: { relationTo: 'pages', value: contactPage.id } },
+    }),
+  ])
+
   payload.logger.info(`— Seeding globals...`)
 
   await Promise.all([
     payload.updateGlobal({
       slug: 'header',
+      // `navItems[].item` is cast until `generate:types` refreshes the Header type
       data: {
         navItems: [
           {
-            link: {
-              type: 'custom',
-              label: 'Posts',
-              url: '/posts',
-            },
+            item: postsMenuItem.id,
           },
           {
-            link: {
-              type: 'reference',
-              label: 'Contact',
-              reference: {
-                relationTo: 'pages',
-                value: contactPage.id,
-              },
-            },
+            item: solutionsMenuItem.id,
+          },
+          {
+            item: contactMenuItem.id,
           },
         ],
-      },
+      } as never,
     }),
     payload.updateGlobal({
       slug: 'footer',

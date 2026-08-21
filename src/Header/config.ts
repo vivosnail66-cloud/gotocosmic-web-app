@@ -1,6 +1,5 @@
 import type { GlobalConfig } from 'payload'
 
-import { link } from '@/fields/link'
 import { revalidateHeader } from './hooks/revalidateHeader'
 
 export const Header: GlobalConfig = {
@@ -12,18 +11,23 @@ export const Header: GlobalConfig = {
     {
       name: 'navItems',
       type: 'array',
-      fields: [
-        link({
-          appearances: false,
-        }),
-      ],
-      maxRows: 6,
       admin: {
         initCollapsed: true,
         components: {
           RowLabel: '@/Header/RowLabel#RowLabel',
         },
+        description:
+          'Top-level items shown in the nav, in order. The full menu structure lives in the menu-items collection.',
       },
+      fields: [
+        {
+          name: 'item',
+          type: 'relationship',
+          relationTo: 'menu-items',
+          required: true,
+        },
+      ],
+      maxRows: 8,
     },
   ],
   hooks: {

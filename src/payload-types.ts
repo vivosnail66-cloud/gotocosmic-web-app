@@ -71,6 +71,7 @@ export interface Config {
     posts: Post;
     media: Media;
     categories: Category;
+    'menu-items': MenuItem;
     users: User;
     redirects: Redirect;
     forms: Form;
@@ -93,6 +94,7 @@ export interface Config {
     posts: PostsSelect<false> | PostsSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
     categories: CategoriesSelect<false> | CategoriesSelect<true>;
+    'menu-items': MenuItemsSelect<false> | MenuItemsSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
     redirects: RedirectsSelect<false> | RedirectsSelect<true>;
     forms: FormsSelect<false> | FormsSelect<true>;
@@ -776,6 +778,58 @@ export interface Form {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "menu-items".
+ */
+export interface MenuItem {
+  id: string;
+  label: string;
+  type?: ('link' | 'columnTitle' | 'featured' | 'cta') | null;
+  /**
+   * Where the item points to. Column titles may be left empty.
+   */
+  link?: {
+    type?: ('reference' | 'custom') | null;
+    newTab?: boolean | null;
+    reference?:
+      | ({
+          relationTo: 'pages';
+          value: string | Page;
+        } | null)
+      | ({
+          relationTo: 'posts';
+          value: string | Post;
+        } | null);
+    url?: string | null;
+  };
+  /**
+   * Leave empty to make this a top-level item.
+   */
+  parent?: (string | null) | MenuItem;
+  /**
+   * Sorts siblings. Lower numbers appear first.
+   */
+  order?: number | null;
+  /**
+   * Which column (1-based) this child appears in inside the panel.
+   */
+  column?: number | null;
+  /**
+   * Small tag next to the label, e.g. New / Hot.
+   */
+  badge?: string | null;
+  /**
+   * One-line description.
+   */
+  description?: string | null;
+  /**
+   * Image used by the featured card.
+   */
+  image?: (string | null) | Media;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "redirects".
  */
 export interface Redirect {
@@ -979,6 +1033,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'categories';
         value: string | Category;
+      } | null)
+    | ({
+        relationTo: 'menu-items';
+        value: string | MenuItem;
       } | null)
     | ({
         relationTo: 'users';
@@ -1328,6 +1386,30 @@ export interface CategoriesSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "menu-items_select".
+ */
+export interface MenuItemsSelect<T extends boolean = true> {
+  label?: T;
+  type?: T;
+  link?:
+    | T
+    | {
+        type?: T;
+        newTab?: T;
+        reference?: T;
+        url?: T;
+      };
+  parent?: T;
+  order?: T;
+  column?: T;
+  badge?: T;
+  description?: T;
+  image?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "users_select".
  */
 export interface UsersSelect<T extends boolean = true> {
@@ -1630,23 +1712,12 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
  */
 export interface Header {
   id: string;
+  /**
+   * Top-level items shown in the nav, in order. The full menu structure lives in the menu-items collection.
+   */
   navItems?:
     | {
-        link: {
-          type?: ('reference' | 'custom') | null;
-          newTab?: boolean | null;
-          reference?:
-            | ({
-                relationTo: 'pages';
-                value: string | Page;
-              } | null)
-            | ({
-                relationTo: 'posts';
-                value: string | Post;
-              } | null);
-          url?: string | null;
-          label: string;
-        };
+        item: string | MenuItem;
         id?: string | null;
       }[]
     | null;
@@ -1785,15 +1856,7 @@ export interface HeaderSelect<T extends boolean = true> {
   navItems?:
     | T
     | {
-        link?:
-          | T
-          | {
-              type?: T;
-              newTab?: T;
-              reference?: T;
-              url?: T;
-              label?: T;
-            };
+        item?: T;
         id?: T;
       };
   updatedAt?: T;

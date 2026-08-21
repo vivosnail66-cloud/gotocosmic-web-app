@@ -13,6 +13,148 @@ feature or fix we ship gets a dated entry here so we can trace *what* changed,
 
 ## Log Entries
 
+### 2026-08-21 — Fix: 客户端 bundle 错误导入服务端模块（`worker_threads` / `revalidatePath`）
+
+**Problem.** Turbopack/webpack 编译时出现两类错误：
+1. `Module not found: Can't resolve 'worker_threads'` — 来自 `pino-abstract-transport`
+2. `You're importing a module that depends on "revalidatePath"/"revalidateTag"` — Next.js 服务端 API 不能在客户端使用
+
+**Root cause.** 模块导入链设计问题。客户端组件（`HeaderNav`、`MobileMenu`、`MegaPanel`、`Component.client.tsx`）从 `@/utilities/getMenu` 导入类型和函数，而 `getMenu.ts` 为了实现 `getCachedMenu` 导入了 `@payload-config` → `payload`（服务端包）。`payload` 内部依赖：
+- `pino` → `pino-abstract-transport` → `worker_threads`（Node.js 核心模块，浏览器不存在）
+- `next/cache` 的 `revalidatePath`/`revalidateTag`（仅服务端可用）
+
+这些服务端依赖被整个拉入浏览器 bundle，导致编译失败。
+
+**Fix.** 拆分模块，解耦客户端与 payload 的依赖链：
+
+- **新建 `src/utilities/getMenuData.ts`** — 纯类型定义 + `resolveTopLevel` + `buildMenuTree` 函数，零 payload 依赖
+- **精简 `src/utilities/getMenu.ts`** — 仅保留 `getCachedMenu`（服务端用），从 `getMenuData.ts` 重新导出类型和函数保持向后兼容
+- **更新客户端组件导入来源** — 6 个文件从 `@/utilities/getMenu` 改为 `@/utilities/getMenuData`：
+  - `src/Header/Nav/mobile.tsx`
+  - `src/Header/Nav/index.tsx`
+  - `src/Header/Nav/linkProps.ts`
+  - `src/Header/Nav/MegaPanel.tsx`
+  - `src/Header/Component.client.tsx`
+  - `src/Header/Component.tsx`（服务端组件，保持从 `getMenu.ts` 导入 `getCachedMenu`）
+
+同时在 `next.config.ts` 的 webpack 配置中添加 `worker_threads: false` fallback 作为防御性措施。
+
+**Verification status.**
+- ✅ 已验证：`pnpm dev` 启动成功，`GET /en` 返回 200，`worker_threads` 和 `revalidatePath`/`revalidateTag` 错误消失
+- 仅剩一个无关的 Image `fill` + `position` 警告，不影响功能
+
+---
+
+### 2026-08-21 — Fix: mega-menu seed failing (`menu-items` ValidationError `link.reference`)
+
+**Problem.** Seeding via admin POST `/next/seed` aborted mid-way with
+`ValidationError` on `menu-items` (`"Link target > Document to link to: This field is
+required."`, `path: link.reference`). The admin UI only showed "An error occurred
+while seeding." — the real error was in the terminal via `payload.logger.error`.
+
+**Root cause.** `menu-items` reuses the shared `link()` field factory, which marks
+`reference`/`url` as **required**. The collection intentionally has link-less rows
+(`columnTitle` column headers). Payload materializes the link group's default
+`type: 'reference'` even when the whole group is omitted, which activates the
+required `reference` — so every column-title row failed validation. This would
+also have blocked editors from creating column-title items in the admin.
+
+**Fix (`src/collections/MenuItems.ts`).**
+
+- Build the link field via the factory (`menuLinkField`), then walk its `fields`
+  and relax `reference`/`url` to `required: false` (deepMerge can't do this via
+  `overrides` — it replaces arrays wholesale).
+- Added a FIELD-level `validate` on the `link` group: `link` / `featured` / `cta`
+  items must have a usable target (`custom.url` or `reference`); `columnTitle`
+  stays link-free. **Do NOT use a collection-level `validate` for this** — Payload
+  does not strip a top-level collection `validate` from the config it sends to the
+  admin client, so the admin `RootLayout` RSC boundary throws "Functions cannot be
+  passed directly to Client Components" (`GET /admin` 500). Field-level validates
+  are stripped and safe (see `src/fields/defaultLexical.ts`).
+- Hardened `src/Header/Nav/linkProps.ts` `toCmsLinkProps`: a target-less link
+  (e.g. the Payload-materialized `{ type: 'reference' }` on a column title) now
+  returns `undefined`, so call sites render the non-clickable fallback instead of
+  passing a broken href into `CMSLink`.
+
+**Verification status.**
+
+- ⚠️ Not re-run this session (sandbox shell unavailable). Re-run seeding: login to
+  admin → POST `/next/seed`. Expect it to complete. Then verify the mega menu
+  (Posts / Solutions hover panel with two columns + featured card + CTA / Contact)
+  and that column-title rows render as plain headings. Also confirm `/admin` loads.
+
+---
+
+### 2026-08-21 — Fix: Turbopack dev ENOENT on `/en` (`[locale]/page` build-manifest)
+
+**Problem.** `pnpm dev` (Turbopack, Next 16 default) failed on `GET /en` with
+`ENOENT: no such file or directory, open '...\.next\dev\server\app\(frontend)\[locale]\page\build-manifest.json'`
+— even after deleting `.next` and starting a completely fresh build. Not a
+stale-cache issue.
+
+**Root cause (working hypothesis, confirmed by the fix).** `[locale]/page.tsx`
+imported the page component from the sibling route segment `./[slug]/page`
+(first as a bare re-export, then as `<Page params={params} />`). Turbopack's
+per-route manifest emission does not handle a page segment whose module graph
+contains another route segment's page module, so it never wrote
+`[locale]/page/build-manifest.json`.
+
+**Fix.** Made the locale root a fully self-contained home page:
+
+- `src/app/(frontend)/[locale]/page.tsx` — standalone copy of the home logic
+  (query slug `'home'`, fall back to `homeStatic`, render hero + blocks +
+  `PageClient` + `PayloadRedirects` + `LivePreviewListener`), with its own
+  `generateMetadata` / `generateStaticParams`. Imports nothing from
+  `./[slug]/page`.
+- `src/app/(frontend)/[locale]/page.client.tsx` — new local `PageClient`
+  (header-theme-light, same body as `[slug]/page.client.tsx`) so the root page
+  has zero cross-segment imports.
+
+**Verification status.**
+
+- ⚠️ Not re-run locally this session. Please test: `pnpm dev` → `GET /en`,
+  `/zh`, `/`, `/en/home` all render.
+- If `/en` STILL 500s, the next discriminator is `pnpm dev --webpack`
+  (bypasses Turbopack dev). If webpack works, it's a Turbopack-dev-specific
+  bug (cf. vercel/next.js route-group / build-manifest issues) and we can pin
+  a workaround or track an upstream fix.
+
+---
+
+### 2026-08-21 — Mega Menu（高级菜单）
+
+**Goal.** 把 Header 的扁平导航升级为 CMS 驱动的 Mega Menu（多栏 + 栏标题、图片卡片、角标/描述、底部 CTA），并加独立搜索入口；后台编辑流畅、可增量扩展。
+
+**Why / 依据.** 参考 Payload 官方讨论 [Best way to build a Mega menu · #16007](https://github.com/payloadcms/payload/discussions/16007)：在 Global 里深层嵌套数组/blocks 会让后台明显变慢。改用**独立扁平 `menu-items` 集合 + `parent` 自引用**，前端一次查询组树。
+
+**决策（已确认）.**
+- 独立 `menu-items` 集合，Header global 通过关系只引用顶级项；两级为主。
+- 面板元素：多栏+栏标题、featured 图卡、badge+description、底部 CTA。
+- 独立搜索：Header 图标 → 展开输入框 → `/{locale}/search?q=`（基础版）。
+- 移动端：手风琴。
+
+**设计文档.** `docs/superpowers/specs/2026-08-21-mega-menu-design.md`（数据模型/组件/缓存/迁移/增量路线都在里面）。
+
+**实现文件.**
+- 新增 `src/collections/MenuItems.ts`（+ hooks/revalidateMenuItems.ts）
+- 新增 `src/utilities/getMenu.ts`（单查询 + 内存组树 + unstable_cache tag `menu_items`；含 `buildMenuTree`/`resolveTopLevel` + 本地类型）
+- 新增 `src/components/HeaderSearch/index.tsx`（client；图标 → 展开输入框 → `/{locale}/search?q=`。因被 client 组件 `Component.client.tsx` 引用，直接做成 client 组件，废弃旧的 `index.client.tsx`——本机可删）
+- 新增 `src/Header/Nav/MegaPanel.tsx`（按 `column` 分组栏 + 栏标题 + featured 图卡 + 底部 CTA 条）、`mobile.tsx`（受控手风琴）、`linkProps.ts`（MenuItemLink → CMSLink props 桥接 cast）
+- 改 `src/Header/config.ts`（navItems 行 `link` → `item` 关系，maxRows 8）、`RowLabel.tsx`、`Component.tsx`（并行取 header+settings+menu）、`Component.client.tsx`（接入 Nav/HeaderSearch/移动端按钮）、`Nav/index.tsx`（桌面 hover/焦点 Mega 面板）
+- 改 `src/payload.config.ts`（注册 MenuItems，admin group `Navigation`）
+- 改 `src/components/Link/index.tsx`（新增 `onClick` 透传，供移动端菜单关闭）
+- 改 `src/endpoints/seed/index.ts`（清库列表加 `menu-items`；seed 构建完整 mega menu 演示数据：顶级 Posts / Solutions / Contact，其中 Solutions 带两栏子项（栏标题 + 带 badge/description 的链接）、featured 图卡、底部 CTA，全部挂在真实 page/post/media 上）
+
+**关键坑（本次记录）.**
+- Header `navItems` 数据形状从 `{ link }` 变成 `{ item: relationship }`，`payload-types.ts` 未重跑前旧的 `Header['navItems']` 类型仍是 `link` 行 → 前端统一在边界 cast（`MenuHeaderData` + `toCmsLinkProps` + `image as unknown as MediaType`），`pnpm generate:types` 后这些 cast 依然成立。
+- `link({ disableLabel: true })` 出来的 link group **没有 `label` 字段**，菜单文案来自集合级 `label` 字段，渲染时传给 `CMSLink` 的 `label` prop。
+- seed 若仍写旧 `link` 形状到 header 会保存失败（`item` 是 required relationship），已同步改 seed。
+
+**Verification status.**
+- ⚠️ 会话内 bash/workspace 不可用，未实跑。本机需：`pnpm generate:types`（menu-items 进 payload-types，Header navItems 类型随之更新）→ `pnpm dev` / `pnpm build` 冒烟：后台配顶级项+子项（含 columnTitle/featured/cta）、前台 hover 面板、移动端手风琴、搜索跳转。登录后台后 POST `/next/seed`（或直接重跑 seed）：导航应显示 Posts / Solutions（hover 出两栏 mega 面板 + 图卡 + CTA）/ Contact。
+
+---
+
 ### 2026-08-21 — Route fixes: leftover `[slug]` stub removed + missing locale-root page
 
 **Problem 1 (build error).** `(frontend)/[slug]` (old pre-i18n redirect stub) and
@@ -40,6 +182,12 @@ export async function generateStaticParams() {
 ```
 
 It reuses the page that already defaults `slug` to `'home'`, so no logic duplication.
+
+> **Superseded (see the entry at the top of this log).** The bare re-export —
+> and even a direct `<Page/>` render importing from `./[slug]/page` — failed
+> under Turbopack dev with `[locale]/page/build-manifest.json` ENOENT on `/en`.
+> The locale root is now a self-contained home page that imports nothing from
+> the `[slug]` segment.
 
 **Verification.** ⚠️ Not re-verified in a live build this session (sandbox shell
 unavailable). Run `pnpm dev` / `pnpm build` locally and confirm `/`, `/en`, `/zh`
